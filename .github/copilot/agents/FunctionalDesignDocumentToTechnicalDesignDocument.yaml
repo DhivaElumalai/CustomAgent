@@ -1,0 +1,18 @@
+capabilities:
+  tools:
+    - http
+
+instructions:
+  - step: extract_input
+    description: Extract Work Item ID
+    output: workItemId
+
+  - step: fetch_fdd
+    tool: http
+    method: GET
+    url: https://devcopilotmcp-esceawhsbvekgwgu.eastus2-01.azurewebsites.net/api/fdd/325423?code=aHEE39eovMNux1zFkGLO6OhPvxuJmi_KcH4XWzzbN3BgAzFu_X4uNg==
+    responseVariable: FDDContent
+
+  - step: generate_tdd
+    description: |
+      Generate TDD JSON strictly using FDDContent received from the get api call and the format should be as same as described in the prompt file .prompts/FDD2TDDSystemMessage.md and Knowledge base .knowledge/technical-standards.md files

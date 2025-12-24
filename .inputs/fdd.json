@@ -1,0 +1,245 @@
+EXT 8803 - Set a floor for discounts based on GP
+Functional Design Document Project Horizon
+History
+
+
+Client Review and Sign-off
+
+Name	Action	Date
+		
+		
+		
+		
+		
+
+
+
+
+
+
+
+ 
+Table of Contents
+1	Business Requirement and Description of Gap	3
+2	Design and Specification	4
+2.1	Defining type of channel: B2B and B2C	4
+2.2	Defining the maximum price override and GP% floor	4
+2.3	Validating Retail discounts for price violation	8
+2.4	Validating Trade agreements for price violation	11
+3	Other items	13
+3.1	Prerequisites and Constraints	13
+3.2	Assumptions	13
+3.3	Setup Required to Support Development	13
+3.4	Systems Affected	13
+
+ 
+1	Business Requirement and Description of Gap
+
+
+VSTS links
+Requirement 8803: Set a floor for discounts based on GP
+As a pricing manager, I need the ability to set a "floor" for discounts using GP%.
+The floor could be attached to a single part, a category of parts, selling location, or role.
+The floor should prevent anyone from selling below a price unless they have security to "Bypass GP% discount floor"
+
+Assumption after design session: GP% floor control will be configured by Item number, Product categories (Line code or Class) and Type of channel (B2B, B2C).
+Requirement 8707: Sell-Pricing-GP%
+As a pricing manager, I need the ability to set pricing over-ride thresholds by role. Pricing thresholds can be established at the customer, SKU, category, or total GP.
+Ability to allow price overrides with appropriate security. Customer type drives the GP%
+Salesman commission is tied to Customer type which is based on GP%
+Pricing can be set at the customer level, customer type level, SKU level
+
+Assumption after design session: Price override thresholds will be configured only by Product categories (Line code or Class).
+Requirement 9911: Ability to define thresholds for order price change by role
+We want to define thresholds for multiple pricing tiers using role-based security.
+Requirement 10094: Control ability to change labor hours or rate via role based security
+As a merchandising manager, I need the ability to control who can change labor rate or labor hours on labor SKUs.
+ 
+2	Design and Specification
+2.1	Defining type of channel: B2B and B2C
+Form: RetailMCRChannelDetail (All call centers)
+Add a new field Channel type. List field options: B2B; B2C. Help text: Specify the type of channel to be used in the GP% floor setup.
+
+
+2.2	Defining the maximum price override and GP% floor
+This section only defines how to configure the GP% floors. The logic to take the floors into account in the SO line is implemented by Requirement 13052: EXT - Sales order - Security - Price changes - Price override.
+GP% floor will be defined for each Line code category and/or Item number. The tables below is an example of the expected configuration:
+
+Line code	Class	B2B GP% floor	B2C GP% floor
+AIR	Airlift	10%	20%
+AIR	Display	12%	22%
+WAR		25%	28%
+WAR	Bumpers, Guards & Kits	22%	25%
+.
+
+Item number	B2B GP% floor	B2C GP% floor
+WAR38671	20%	22%
+
+Create a new form Price override, discount floors and Synthetic cost under Retail > Pricing and discounts as shown below:
+ 
+ 
+ 
+ 
+
+
+This form can be accessed only by users with the following privileges:
+•	Maintain trade agreement journals
+•	Maintain retail pricing
+•	Maintain retail discounts
+The Category hierarchy to be displayed is defined in Retail parameter Line code hierarchy for price list (see Requirement 13035: EXT - Price and promotion - Reporting).
+The Discount floor, Synthetic cost, and Maximum override allowed can be defined at any level of the hierarchy (Line code or Class). The logic to inherit the values from the highest to the lowest level is being implemented by Requirement 13052: EXT - Sales order - Security - Price changes - Price override.
+The General fasttab is the same from the form EcoResCategory (Category hierarchy). All fields are read- only except the new ones below:
+-	B2B discount floor (GP%): numeric, two decimals, positive numbers, range from 0% to 100%, help text: Specify the discount floor in terms of gross profit percentage for B2B channels.
+-	B2C discount floor (GP%): numeric, two decimals, positive numbers, range from 0% to 100%, help text: Specify the discount floor in terms of gross profit percentage for B2C channels.
+Synthetic cost percentage: numeric, two decimals, negative and positive number, help text: Specify the percentage to calculate the synthetic cost based on the purchase price.
+In the Maximum price override allowed fasttab, add a grid with the fields:
+-	Role: list of user roles. Help text: Select the user role.
+ 
+-	Max override allowed: percentage. Help text: Specify a percentage for the maximum sales price override allowed.
+Add the fields below to the form EcoResProductDetailExtended (regardless the menu option used to launch the form).
+These fields must be available in the Released products entity for import/export.
+-	Sell fasttab:
+o	B2B discount floor (GP%): numeric, two decimals, positive numbers, help text: Specify the discount floor in terms of gross profit percentage for B2B channels.
+o	B2C discount floor (GP%): numeric, two decimals, positive numbers, help text: Specify the discount floor in terms of gross profit percentage for B2C channels.
+-	Purchase fasttab:
+o	Synthetic cost percentage: numeric, two decimals, negative and positive number, help text: Specify the percentage to calculate the synthetic cost based on the purchase price.
+
+
+ 
+ 
+
+2.3	Validating Retail discounts for price violation
+Assumption: the validation cannot be performed for Discount type = Mix and match, Thresholds, and Quantity discounts due to the combination of items, quantities, and amount they require to apply the discount rule.
+Form: RetailPeriodicDiscount
+Add a function Validate discount floor in the action pane only for Discount type = Discount or Price adjustment. Disable the button for other Discount Types.
+ 
+ 
+
+
+When the user clicks Validate discount floor, D365 must evaluate if the new GP% is below the floor for each product in that discount configuration *or* below the UMAP.
+The date to be considered for retrieving the price is:
+•	If Effective date > Today, use Effective date;
+•	Otherwise, use Today.
+The results must be saved in a new table Items with price violation as follow so that the user can analyze the impact of newly created discounts.
+D365 must present the option to run this process in the background.
+Before saving the lines in this table, D365 must delete all lines with the same Discount ID, so that only the current calculation is stored.
+When the process finishes, if at least one line has been created in the table, display a warning message “There are items with potential sales price below the GP% floor or UMAP.”.
+
+
+Channel	Item number	Product name	Price group	Synthetic cost	Current unit
+price	Current GP%	Discount amount	Final price
+003-Compton	PXA5161-
+295550	Abc	PG-All	100.00	120.00	16.67%	12.00	108.00
+012-Oakland	PXA5161-
+295550	Abc	PG-All	100.00	120.00	16.67%	12.00	108.00
+003-Compton	FIR9124	Cde	PG-All	80.00	95.00	15.79%	9.50	85.50
+003-Compton	AIR16060	Fgh	PG-All	165.00	230.00	28.26%	23.00	207.00
+003-Compton	S/B2747	xyz	PG-All	150.00	225.00	33.33%	22.50	202.50
+Cont.
+ 
+New
+GP%	B2B GP%
+floor	B2C GP%
+floor	UMAP
+7.41%	10.00%	12.00%	109.99
+7.41%	7.00%	9.00%	109.99
+6.43%	6.00%	6.00%	109.99
+	20.29%		20.00%		21.00%		190.00
+25.93%	25.00%	28.00%	180.00
+Cont.
+
+Calculation date	Final price origin	Final price Id	Final price description
+5/15/2019	Discount	TCOR-000101	10% off all accessories
+5/15/2019	Discount	TCOR-000101	10% off all accessories
+5/15/2019	Discount	TCOR-000101	10% off all accessories
+5/15/2019	Discount	TCOR-000101	10% off all accessories
+			
+
+Note: The line in green must not be saved because the New GP% is not below the floor or the Final price does not violate UMAP. It is been represented here to demonstrate the calculation. The cells in red indicate a new GP% below one of the discount floors or UMAP violation and therefore should be saved in the table.
+The table must be filled in as follow:
+-	Retail channel ID: channel ID linked to the Price group in the Discount form
+o	If the Price group has more than one channel, run the calculation for each channel that belongs to the Price group.
+-	Channel name: Channel name from the Call center
+-	Item number:
+o	Product number from the Retail discount line
+o	-or-
+o	If the Retail discount line has a Category, run the calculation for each item that belongs to the category.
+-	Product name: from the item master data.
+-	Price group: from the Retail discount.
+-	Synthetic cost: calculate using the field from the Released product. See Requirement 24062: EXT - Sales order - Security - Price changes - Cost display.
+-	Current unit price: evaluate current Trade agreements as follow:
+o	Item relation = Table
+o	Item code = same item being displayed in the screen
+o	From date and To date = consistent with the current date.
+o	*and*
+	Party code type = Group
+	Account selection = Price group from the Retail discount. Evaluate the price for each price group linked to the discount.
+-	Current GP%: formula: (Current unit price – Synthetic cost) / Current unit price
+-	Discount amount: calculate the discount from the Discount rule. Consider percentage or amount discount.
+-	Final price: formula (Current unit price – Discount amount)
+-	New GP%: formula: (Final price – Synthetic cost) / Final price
+-	B2B GP% floor: from the Line code category assigned to the item. If the category directly assigned to the item does not have a GP% floor, navigate to the upper level within the Hierarchy.
+-	B2C GP% floor: same as above, for B2C field.
+-	UMAP: UMAP field from the item master data.
+ 
+-	Calculation date: current date
+-	Final price origin: from the Discount type.
+-	Final price Id: from the Discount number.
+-	Final price description: from the discount Name.
+
+
+Create a new list page Items with price violation to be accessed from Retail > Pricing and discounts to display the table defined in this section. The list page must have only the Delete action pane function and user must able to select several lines and delete all selected records.
+This list page can be accessed only by users with the following privileges:
+•	Maintain trade agreement journals
+•	Maintain retail pricing
+•	Maintain retail discounts
+
+
+
+2.4	Validating Trade agreements for price violation
+Form: PriceDiscAdm (Trade agreement journal lines)
+When the user clicks Validate all lines or Validate selected lines, D365 must verify if the Amount in currency is below the discount floor by applying the same logic as described in the previous section.
+Also, apply the same logic to save the table Items with price violation. Only process Trade agreement lines where Product code type = Table.
+Before creating lines in the Items with price violation table, delete all records where:
+-	Trade agreement journal number = same value as the Trade agreement being processed.
+-	- or -
+-	Party code type, and Account selection, and Product code type, and Item relation = same values as the Trade agreement line being processed.
+Below are the fields that have a different logic:
+-	Item number: from the Item relation.
+-	Price group: from the Account selection.
+-	Current unit price: evaluate posted Trade agreements as follow:
+o	Item relation = Table
+o	Item code = same item being displayed in the screen
+o	From date and To date: according to the logic below:
+	If the current journal line From date > Today, use From date;
+	Otherwise, use Today.
+o	*and*
+	Party code type = Group
+	- and -
+•	Account selection = Price group for all channels defined in the Retail parameters (see Requirement 24277: EXT - Sales order - Security - Price changes - Log and report)
+•	- or –
+ 
+•	Account selection = Account selection from the current Trade agreement line.
+•	*Note: there might be more than one Trade agreement for different price group, e.g. PG-All (Price group for all channels defined in the Retail parameters) and PG-DLR3 (defined in the Trade agreement being processed). In that case, D365 must save one line for each Current unit price.
+-	Current GP%: formula: (Amount in currency – Synthetic cost) / Amount in currency
+-	Discount amount: zero.
+-	Final price: Amount in currency
+-	Final price origin: fixed “Trade agreement”
+-	Final price Id: from the Trade agreement journal number
+-	Final price description: Concatenation of Trade agreement line fields as follow: [Generated from retail category (*Note: this is the Description field) / Account code=Group / Account selection=PG- All]
+If the New GP% is below the floor or violates UMAP, indicate Yes in the column Price violation in the Trade agreement line as shown below.
+
+If the user clicks Items with price violation on the action pane, D365 must open the new list page Items with price violation with the records filtered for the current Trade agreement journal number.
+ 
+3	Other items
+3.1	Prerequisites and Constraints
+N/A
+
+3.2	Assumptions
+N/A
+
+3.3	Setup Required to Support Development
+N/A
+
+3.4	Systems Affected
+N/A

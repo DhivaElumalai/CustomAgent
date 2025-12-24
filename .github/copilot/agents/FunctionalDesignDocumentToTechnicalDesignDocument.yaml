@@ -1,18 +1,29 @@
-capabilities:
-  tools:
-    - http
+name: FunctionalDesignDocumentToTechnicalDesignDocument
+description: Generate TDD JSON from file-based FDD using prompt and knowledge rules
 
 instructions:
-  - step: extract_input
-    description: Extract Work Item ID
-    output: workItemId
 
-  - step: fetch_fdd
-    tool: http
-    method: GET
-    url: https://devcopilotmcp-esceawhsbvekgwgu.eastus2-01.azurewebsites.net/api/fdd/325423?code=aHEE39eovMNux1zFkGLO6OhPvxuJmi_KcH4XWzzbN3BgAzFu_X4uNg==
-    responseVariable: FDDContent
+  - step: load_fdd
+    description: |
+      Use the Functional Design Document provided in:
+      .inputs/fdd.json
+      Treat this file as the complete and authoritative FDD source.
 
   - step: generate_tdd
     description: |
-      Generate TDD JSON strictly using FDDContent received from the get api call and the format should be as same as described in the prompt file .prompts/FDD2TDDSystemMessage.md and Knowledge base .knowledge/technical-standards.md files
+      Generate a Technical Design Document (TDD) strictly following:
+
+      Authoritative rules:
+      - .prompts/FDD2TDDSystemMessage.md
+      - .knowledge/technical-standards.md
+
+      Constraints:
+      - Output JSON only
+      - Follow the exact JSON structure defined in the prompt file
+      - Use null or empty arrays for missing data
+      - Do NOT invent data
+      - All validator classes must end with 'Policy'
+      - No markdown, explanations, or comments
+
+output:
+  format: json
